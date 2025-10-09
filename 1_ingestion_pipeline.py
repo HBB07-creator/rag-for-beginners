@@ -1,8 +1,11 @@
 import os
+import time
 from langchain_community.document_loaders import TextLoader, DirectoryLoader
 from langchain_text_splitters import CharacterTextSplitter
 from langchain_openai import OpenAIEmbeddings
 from langchain_chroma import Chroma
+from langchain_google_genai import GoogleGenerativeAIEmbeddings
+from langchain_google_genai import ChatGoogleGenerativeAI
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -33,11 +36,11 @@ def load_documents(docs_path="docs"):
         print(f"  Source: {doc.metadata['source']}")
         print(f"  Content length: {len(doc.page_content)} characters")
         print(f"  Content preview: {doc.page_content[:100]}...")
-        print(f"  metadata: {doc.metadata}")
+        print(f"  meta {doc.metadata}")
 
     return documents
 
-def split_documents(documents, chunk_size=1000, chunk_overlap=0):
+def split_documents(documents, chunk_size=1000, chunk_overlap=200):
     """Split documents into smaller chunks with overlap"""
     print("Splitting documents into chunks...")
     
@@ -63,22 +66,73 @@ def split_documents(documents, chunk_size=1000, chunk_overlap=0):
     
     return chunks
 
-def create_vector_store(chunks, persist_directory="db/chroma_db"):
-    """Create and persist ChromaDB vector store"""
-    print("Creating embeddings and storing in ChromaDB...")
+def create_vector_store_with_rate_limiting(
+    chunks, 
+    persist_directory="db/chroma_db",
+    batch_size=100,
+    delay_seconds=60
+):
+    """Create and persist ChromaDB vector store with rate limiting"""
+    print(f"Creating embeddings and storing in ChromaDB with rate limiting...")
+    print(f"Batch size: {batch_size} chunks")
+    print(f"Delay between batches: {delay_seconds} seconds\n")
         
-    embedding_model = OpenAIEmbeddings(model="text-embedding-3-small")
+    embedding_model = GoogleGenerativeAIEmbeddings(model="gemini-embedding-001")
     
-    # Create ChromaDB vector store
-    print("--- Creating vector store ---")
-    vectorstore = Chroma.from_documents(
-        documents=chunks,
-        embedding=embedding_model,
-        persist_directory=persist_directory, 
-        collection_metadata={"hnsw:space": "cosine"}
-    )
-    print("--- Finished creating vector store ---")
+    # Initialize empty vector store with first batch
+    total_chunks = len(chunks)
+    num_batches = (total_chunks + batch_size - 1) // batch_size
     
+    print(f"Total chunks: {total_chunks}")
+    print(f"Number of batches: {num_batches}\n")
+    
+    vectorstore = None
+    
+    for batch_idx in range(num_batches):
+        start_idx = batch_idx * batch_size
+        end_idx = min((batch_idx + 1) * batch_size, total_chunks)
+        batch_chunks = chunks[start_idx:end_idx]
+        
+        print(f"Processing batch {batch_idx + 1}/{num_batches} (chunks {start_idx + 1}-{end_idx})...")
+        
+        try:
+            if vectorstore is None:
+                # Create vector store with first batch
+                print("--- Creating initial vector store ---")
+                vectorstore = Chroma.from_documents(
+                    documents=batch_chunks,
+                    embedding=embedding_model,
+                    persist_directory=persist_directory,
+                    collection_metadata={"hnsw:space": "cosine"}
+                )
+                print(f"✅ Batch {batch_idx + 1} processed successfully")
+            else:
+                # Add subsequent batches to existing vector store
+                print("--- Adding to existing vector store ---")
+                vectorstore.add_documents(documents=batch_chunks)
+                print(f"✅ Batch {batch_idx + 1} processed successfully")
+            
+            # Wait before processing next batch (except for last batch)
+            if batch_idx < num_batches - 1:
+                print(f"⏳ Waiting {delay_seconds} seconds before next batch...\n")
+                time.sleep(delay_seconds)
+            
+        except Exception as e:
+            print(f"❌ Error processing batch {batch_idx + 1}: {str(e)}")
+            print(f"Waiting {delay_seconds} seconds before retrying...\n")
+            time.sleep(delay_seconds)
+            # Retry the same batch
+            if vectorstore is None:
+                vectorstore = Chroma.from_documents(
+                    documents=batch_chunks,
+                    embedding=embedding_model,
+                    persist_directory=persist_directory,
+                    collection_metadata={"hnsw:space": "cosine"}
+                )
+            else:
+                vectorstore.add_documents(documents=batch_chunks)
+    
+    print(f"\n--- Finished creating vector store ---")
     print(f"Vector store created and saved to {persist_directory}")
     return vectorstore
 
@@ -90,11 +144,15 @@ def main():
     docs_path = "docs"
     persistent_directory = "db/chroma_db"
     
+    # Configuration for rate limiting
+    BATCH_SIZE = 5  # Process 5 chunks at a time
+    DELAY_SECONDS = 60  # Wait 60 seconds between batches
+    
     # Check if vector store already exists
     if os.path.exists(persistent_directory):
         print("✅ Vector store already exists. No need to re-process documents.")
         
-        embedding_model = OpenAIEmbeddings(model="text-embedding-3-small")
+        embedding_model = GoogleGenerativeAIEmbeddings(model="gemini-embedding-001")
         vectorstore = Chroma(
             persist_directory=persistent_directory,
             embedding_function=embedding_model, 
@@ -111,15 +169,19 @@ def main():
     # Step 2: Split into chunks
     chunks = split_documents(documents)
     
-    # # Step 3: Create vector store
-    vectorstore = create_vector_store(chunks, persistent_directory)
+    # Step 3: Create vector store with rate limiting
+    vectorstore = create_vector_store_with_rate_limiting(
+        chunks, 
+        persistent_directory,
+        batch_size=BATCH_SIZE,
+        delay_seconds=DELAY_SECONDS
+    )
     
     print("\n✅ Ingestion complete! Your documents are now ready for RAG queries.")
     return vectorstore
 
 if __name__ == "__main__":
     main()
-
 
 
 
