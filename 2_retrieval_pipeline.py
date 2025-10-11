@@ -1,4 +1,6 @@
 from langchain_chroma import Chroma
+from langchain_google_genai import GoogleGenerativeAIEmbeddings
+from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_openai import OpenAIEmbeddings
 from dotenv import load_dotenv
 
@@ -7,7 +9,8 @@ load_dotenv()
 persistent_directory = "db/chroma_db"
 
 # Load embeddings and vector store
-embedding_model = OpenAIEmbeddings(model="text-embedding-3-small")
+# embedding_model = OpenAIEmbeddings(model="text-embedding-3-small")
+embedding_model = GoogleGenerativeAIEmbeddings(model="gemini-embedding-001")
 
 db = Chroma(
     persist_directory=persistent_directory,

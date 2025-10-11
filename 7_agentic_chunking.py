@@ -1,11 +1,12 @@
 from langchain_openai import ChatOpenAI
+from langchain_google_genai import ChatGoogleGenerativeAI
 from dotenv import load_dotenv
 
 # Load environment variables
 load_dotenv()
 
 # Initialize the LLM
-llm = ChatOpenAI(model="gpt-3.5-turbo", temperature=0)
+llm = ChatGoogleGenerativeAI(model="gemini-2.5-flash", temperature=0)
 
 # Tesla text to chunk
 tesla_text = """Tesla's Q3 Results

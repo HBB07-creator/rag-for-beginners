@@ -145,7 +145,7 @@ def main():
     persistent_directory = "db/chroma_db"
     
     # Configuration for rate limiting
-    BATCH_SIZE = 100  # Process 5 chunks at a time
+    BATCH_SIZE = 50  # Process 5 chunks at a time
     DELAY_SECONDS = 60  # Wait 60 seconds between batches
     
     # Check if vector store already exists
