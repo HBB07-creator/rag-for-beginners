@@ -40,7 +40,7 @@ def load_documents(docs_path="docs"):
 
     return documents
 
-def split_documents(documents, chunk_size=1000, chunk_overlap=200):
+def split_documents(documents, chunk_size=500, chunk_overlap=100):
     """Split documents into smaller chunks with overlap"""
     print("Splitting documents into chunks...")
     
@@ -145,7 +145,7 @@ def main():
     persistent_directory = "db/chroma_db"
     
     # Configuration for rate limiting
-    BATCH_SIZE = 5  # Process 5 chunks at a time
+    BATCH_SIZE = 100  # Process 5 chunks at a time
     DELAY_SECONDS = 60  # Wait 60 seconds between batches
     
     # Check if vector store already exists
